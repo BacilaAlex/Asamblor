@@ -149,16 +149,20 @@ class Assembler
         switch (lastThreeBites[0])
         {
             case '0':
+                //b1
                 break;
 
             case '1':
                 switch (lastThreeBites)
                 {
                     case "100":
+                        //b2
                         break;
                     case "110":
+                        //b3
                         break;
                     case "111":
+                        //b4
                         break;
                 }
                 break;
@@ -198,12 +202,5 @@ class Assembler
             }
             Console.WriteLine();
         }
-    }
-
-    static long BinaryToNumber(string binaryStr)
-    {
-        // Convert binary string to a number
-        long number = Convert.ToInt64(binaryStr, 2);
-        return number;
     }
 }
