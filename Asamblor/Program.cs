@@ -1,96 +1,165 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.IO;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 class Assembler
 {
+    static byte PC;
     static byte[] mem = new byte[65536];
 
-    static Dictionary<string, string> instructionMap = new Dictionary<string, string>
+    static Dictionary<string, int> instructionMap = new Dictionary<string, int>
     {
-        {"MOV","0000"},
-        {"ADD", "0001"},
-        {"SUB", "0010"},
-        {"CMP", "0011"},
-        {"AND", "0100"},
-        {"OR", "0101"},
-        {"XOR", "0110"},
-        {"CLR", "1000000000"},
-        {"NEG", "1000000001"},
-        {"INC", "1000000010"},
-        {"DEC", "1000000011"},
-        {"ASL", "1000000100"},
-        {"ASR", "1000000101"},
-        {"LSR", "1000000110"},
-        {"ROL", "1000000111"},
-        {"ROR", "1000001000"},
-        {"RLC", "1000001001"},
-        {"RRC", "1000001010"},
-        {"JMP", "1000001011"},
-        {"CALL", "1000001100"},
-        {"PUSH", "1000001101"},
-        {"POP", "1000001110"},
-        {"BR", "11000000"},
-        {"BNE", "11000001"},
-        {"BEQ", "11000010"},
-        {"BPL", "11000011"},
-        {"BMI", "11000100"},
-        {"BCS", "11000101"},
-        {"BCC", "11000110"},
-        {"BVS", "11000111"},
-        {"BVC", "11001000"},
-        {"CLC", "1110000000000000"},
-        {"CLV", "1110000000000001"},
-        {"CLZ", "1110000000000010"},
-        {"CLS", "1110000000000011"},
-        {"CCC", "1110000000000100"},
-        {"SEC", "1110000000000101"},
-        {"SEV", "1110000000000110"},
-        {"SEZ", "1110000000000111"},
-        {"SES", "1110000000001000"},
-        {"SCC", "1110000000001001"},
-        {"NOP", "1110000000001010"},
-        {"RET", "1110000000001011"},
-        {"RETI", "1110000000001100"},
-        {"HALT", "1110000000001101"},
-        {"WAIT", "1110000000001110"},
-        {"PUSH PC", "1110000000001111"},
-        {"POP PC", "1110000000010000"},
-        {"PUSH FLAG", "1110000000010001"},
-        {"POP FLAG", "1110000000010010"}
+        //b1
+        {"MOV", Convert.ToInt32("0000", 2)},
+        {"ADD", Convert.ToInt32("0001", 2)},
+        {"SUB", Convert.ToInt32("0010", 2)},
+        {"CMP", Convert.ToInt32("0011", 2)},
+        {"AND", Convert.ToInt32("0100", 2)},
+        {"OR", Convert.ToInt32("0101", 2)},
+        {"XOR", Convert.ToInt32("0110", 2)},
+        //b2
+        {"CLR", Convert.ToInt32("1000000000", 2)},
+        {"NEG", Convert.ToInt32("1000000001", 2)},
+        {"INC", Convert.ToInt32("1000000010", 2)},
+        {"DEC", Convert.ToInt32("1000000011", 2)},
+        {"ASL", Convert.ToInt32("1000000100", 2)},
+        {"ASR", Convert.ToInt32("1000000101", 2)},
+        {"LSR", Convert.ToInt32("1000000110", 2)},
+        {"ROL", Convert.ToInt32("1000000111", 2)},
+        {"ROR", Convert.ToInt32("1000001000", 2)},
+        {"RLC", Convert.ToInt32("1000001001", 2)},
+        {"RRC", Convert.ToInt32("1000001010", 2)},
+        {"JMP", Convert.ToInt32("1000001011", 2)},
+        {"CALL", Convert.ToInt32("1000001100", 2)},
+        {"PUSH", Convert.ToInt32("1000001101", 2)},
+        {"POP", Convert.ToInt32("1000001110", 2)},
+        //b3
+        {"BR", Convert.ToInt32("11000000", 2)},
+        {"BNE", Convert.ToInt32("11000001", 2)},
+        {"BEQ", Convert.ToInt32("11000010", 2)},
+        {"BPL", Convert.ToInt32("11000011", 2)},
+        {"BMI", Convert.ToInt32("11000100", 2)},
+        {"BCS", Convert.ToInt32("11000101", 2)},
+        {"BCC", Convert.ToInt32("11000110", 2)},
+        {"BVS", Convert.ToInt32("11000111", 2)},
+        {"BVC", Convert.ToInt32("11001000", 2)},
+        //b4
+        {"CLC", Convert.ToInt32("1110000000000000", 2)},
+        {"CLV", Convert.ToInt32("1110000000000001", 2)},
+        {"CLZ", Convert.ToInt32("1110000000000010", 2)},
+        {"CLS", Convert.ToInt32("1110000000000011", 2)},
+        {"CCC", Convert.ToInt32("1110000000000100", 2)},
+        {"SEC", Convert.ToInt32("1110000000000101", 2)},
+        {"SEV", Convert.ToInt32("1110000000000110", 2)},
+        {"SEZ", Convert.ToInt32("1110000000000111", 2)},
+        {"SES", Convert.ToInt32("1110000000001000", 2)},
+        {"SCC", Convert.ToInt32("1110000000001001", 2)},
+        {"NOP", Convert.ToInt32("1110000000001010", 2)},
+        {"RET", Convert.ToInt32("1110000000001011", 2)},
+        {"RETI", Convert.ToInt32("1110000000001100", 2)},
+        {"HALT", Convert.ToInt32("1110000000001101", 2)},
+        {"WAIT", Convert.ToInt32("1110000000001110", 2)},
+        {"PUSH PC", Convert.ToInt32("1110000000001111", 2)},
+        {"POP PC", Convert.ToInt32("1110000000010000", 2)},
+        {"PUSH FLAG", Convert.ToInt32("1110000000010001", 2)},
+        {"POP FLAG", Convert.ToInt32("1110000000010010", 2)}
     };
 
-    static Dictionary<string, string> registerMap = new Dictionary<string, string>
+    static Dictionary<string, byte[]> instructionMap2 = new Dictionary<string, byte[]>
     {
-        {"R0", "0000"},
-        {"R1", "0001"},
-        {"R2", "0010"},
-        {"R3", "0011"},
-        {"R4", "0100"},
-        {"R5", "0101"},
-        {"R6", "0110"},
-        {"R7", "0111"},
-        {"R8", "1000"},
-        {"R9", "1001"},
-        {"R10", "1010"},
-        {"R11", "1011"},
-        {"R12", "1100"},
-        {"R13", "1101"},
-        {"R14", "1110"},
-        {"R15", "1111"}
+        //b1
+        {"MOV", GetBytes("0000")},
+        {"ADD", GetBytes("0001")},
+        {"SUB", GetBytes("0010")},
+        {"CMP", GetBytes("0011")},
+        {"AND", GetBytes("0100")},
+        {"OR", GetBytes("0101")},
+        {"XOR", GetBytes("0110")},
+        //b2
+        {"CLR", GetBytes("1000000000")},
+        {"NEG", GetBytes("1000000001")},
+        {"INC", GetBytes("1000000010")},
+        {"DEC", GetBytes("1000000011")},
+        {"ASL", GetBytes("1000000100")},
+        {"ASR", GetBytes("1000000101")},
+        {"LSR", GetBytes("1000000110")},
+        {"ROL", GetBytes("1000000111")},
+        {"ROR", GetBytes("1000001000")},
+        {"RLC", GetBytes("1000001001")},
+        {"RRC", GetBytes("1000001010")},
+        {"JMP", GetBytes("1000001011")},
+        {"CALL", GetBytes("1000001100")},
+        {"PUSH", GetBytes("1000001101")},
+        {"POP", GetBytes("1000001110")},
+        //b3
+        {"BR", GetBytes("11000000")},
+        {"BNE", GetBytes("11000001")},
+        {"BEQ", GetBytes("11000010")},
+        {"BPL", GetBytes("11000011")},
+        {"BMI", GetBytes("11000100")},
+        {"BCS", GetBytes("11000101")},
+        {"BCC", GetBytes("11000110")},
+        {"BVS", GetBytes("11000111")},
+        {"BVC", GetBytes("11001000")},
+        //b4
+        {"CLC", GetBytes("1110000000000000")},
+        {"CLV", GetBytes("1110000000000001")},
+        {"CLZ", GetBytes("1110000000000010")},
+        {"CLS", GetBytes("1110000000000011")},
+        {"CCC", GetBytes("1110000000000100")},
+        {"SEC", GetBytes("1110000000000101")},
+        {"SEV", GetBytes("1110000000000110")},
+        {"SEZ", GetBytes("1110000000000111")},
+        {"SES", GetBytes("1110000000001000")},
+        {"SCC", GetBytes("1110000000001001")},
+        {"NOP", GetBytes("1110000000001010")},
+        {"RET", GetBytes("1110000000001011")},
+        {"RETI", GetBytes("1110000000001100")},
+        {"HALT", GetBytes("1110000000001101")},
+        {"WAIT", GetBytes("1110000000001110")},
+        {"PUSH PC", GetBytes("1110000000001111")},
+        {"POP PC", GetBytes("1110000000010000")},
+        {"PUSH FLAG", GetBytes("1110000000010001")},
+        {"POP FLAG", GetBytes("1110000000010010")}
+    };
+    static byte[] GetBytes(string binaryString)
+    {
+        var counrrSHL = 16 - binaryString.Length;
+        var number = Convert.ToInt32(binaryString, 2);
+        number <<= counrrSHL;
+        return BitConverter.GetBytes(number).Take(2).ToArray();
+    }
+
+    static Dictionary<string, int> registerMap = new Dictionary<string, int>
+    {
+        {"R0", Convert.ToInt32("0000", 2)},
+        {"R1", Convert.ToInt32("0001", 2)},
+        {"R2", Convert.ToInt32("0010", 2)},
+        {"R3", Convert.ToInt32("0011", 2)},
+        {"R4", Convert.ToInt32("0100", 2)},
+        {"R5", Convert.ToInt32("0101", 2)},
+        {"R6", Convert.ToInt32("0110", 2)},
+        {"R7", Convert.ToInt32("0111", 2)},
+        {"R8", Convert.ToInt32("1000", 2)},
+        {"R9", Convert.ToInt32("1001", 2)},
+        {"R10", Convert.ToInt32("1010", 2)},
+        {"R11", Convert.ToInt32("1011", 2)},
+        {"R12", Convert.ToInt32("1100", 2)},
+        {"R13", Convert.ToInt32("1101", 2)},
+        {"R14", Convert.ToInt32("1110", 2)},
+        {"R15", Convert.ToInt32("1111", 2)}
     };
 
-    static Dictionary<string, string> addressingModeMap = new Dictionary<string, string>
+    static Dictionary<string, int> addressingModeMap = new Dictionary<string, int>
     {
-        {"AM", "00"},
-        {"AD", "01"},
-        {"AI", "10"},
-        {"AX", "11"}
+        {"AM", Convert.ToInt32("00", 2)},
+        {"AD", Convert.ToInt32("01", 2)},
+        {"AI", Convert.ToInt32("10", 2)},
+        {"AX", Convert.ToInt32("11", 2)}
     };
 
     static void Main(string[] args)
     {
-        string filePath = "D:\\Visual Studio Saves\\Asamblor\\Asamblor\\Test.asm";
+        string filePath = "E:\\Visual Studio\\Visual Studio Saves\\Asamblor\\Asamblor\\Test.asm";
 
         if (!File.Exists(filePath))
         {
@@ -106,13 +175,9 @@ class Assembler
                 int memIndex = 0;
                 while ((line = sr.ReadLine()) != null)
                 {
-                    string binaryInstruction = ParseInstruction(line);
-                    if (!string.IsNullOrEmpty(binaryInstruction))
-                    {
-                        int instructionValue = Convert.ToInt32(binaryInstruction, 2);
-                        mem[memIndex++] = (byte)(instructionValue >> 8);
-                        mem[memIndex++] = (byte)(instructionValue & 0xFF);
-                    }
+                    int instructionValue = ParseInstruction(line);
+                    mem[memIndex++] = (byte)(instructionValue >> 8);
+                    mem[memIndex++] = (byte)(instructionValue & 0xFF);
                 }
             }
 
@@ -125,66 +190,160 @@ class Assembler
         }
     }
 
-    static string ParseInstruction(string line)
+    static int ParseInstruction(string line)
     {
+        int IR = -1, MAS, RS, MAD, RD, OFFSET = -1;
+
+        int indexLine = 0;
+
         // Remove comments and trim the line
         line = line.Split('#')[0].Trim();
 
         if (string.IsNullOrEmpty(line))
         {
-            return null;
+            throw new ArgumentNullException();
         }
 
-        string[] parts = line.Split(' ', ',', '(', ')');
-        string instruction = parts[0];
-        string binaryInstruction = "";
+        string[] parts = line.Split(new[] { ' ', ',', ':', ';', '.' }, StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).ToArray();
+        string instruction = parts[indexLine];
+
 
         if (instructionMap.ContainsKey(instruction))
         {
-            binaryInstruction = instructionMap[instruction];
+            IR = instructionMap[instruction];
         }
-
-        var lastThreeBites = binaryInstruction[..2];
-
-        switch (lastThreeBites[0])
+        else
         {
-            case '0':
-                //b1
-                break;
-
-            case '1':
-                switch (lastThreeBites)
-                {
-                    case "100":
-                        //b2
-                        break;
-                    case "110":
-                        //b3
-                        break;
-                    case "111":
-                        //b4
-                        break;
-                }
-                break;
+            Eticheta();
+            indexLine++;
         }
 
-        for (int i = 1; i < parts.Length; i++)
+
+        var byteInstruction = instructionMap2[instruction];
+
+        var lastBite = byteInstruction[^1] & 0x80;
+        var lastThreeBites = byteInstruction[^1] & 0xE0;
+
+        if (lastBite.Equals(0x0))
         {
-            if (registerMap.ContainsKey(parts[i]))
+            //b1
+            (MAD, RD) = GetMADandRD(parts, indexLine);
+            indexLine++;
+            (MAS, RS) = GetMASandRS(parts, indexLine);
+
+            IR <<= 2;
+            IR += MAS;
+            IR <<= 4;
+            IR += RS;
+            IR <<= 2;
+            IR += MAD;
+            IR <<= 4;
+            IR += RD;
+        }
+        else
+        {
+            switch (lastThreeBites)
             {
-                binaryInstruction += registerMap[parts[i]];
-            }
-            else if (addressingModeMap.ContainsKey(parts[i]))
-            {
-                binaryInstruction += addressingModeMap[parts[i]];
-            }
-            else if (int.TryParse(parts[i], out int number))
-            {
-                binaryInstruction += Convert.ToString(number, 2).PadLeft(4, '0');
+                case 0x80:
+                    //b2
+                    (MAD, RD) = GetMADandRD(parts, indexLine);
+                    IR <<= 2;
+                    IR += MAD;
+                    IR <<= 4;
+                    IR += RD;
+                    break;
+                case 0xC0:
+                    //b3
+                    IR <<= 8;
+                    IR += OFFSET;
+                    break;
+                case 0xE0:
+                    //b4
+                    IR = IR;
+                    break;
             }
         }
 
-        return binaryInstruction;
+        return IR;
+    }
+
+    static (int MAS, int RS) GetMASandRS(string[] parts, int indexLine)
+    {
+        int MAS;
+        int RS;
+        //MAS & RS
+        if (registerMap.ContainsKey(parts[indexLine + 1]))
+        {
+            MAS = addressingModeMap["AD"];
+            RS = registerMap[parts[indexLine + 1]];
+        }
+        else
+        {
+            parts = parts.Concat(parts[indexLine + 1].Split(new char[] { '(', ')' }, StringSplitOptions.RemoveEmptyEntries)).ToArray();
+
+            var tempList = parts.ToList();
+            tempList.RemoveAt(indexLine + 1);
+            parts = tempList.ToArray();
+
+            if (registerMap.ContainsKey(parts[indexLine + 1]))
+            {
+                MAS = addressingModeMap["AI"];
+                RS = registerMap[parts[indexLine + 1]];
+            }
+            else if (parts.Length > indexLine + 2 && registerMap.ContainsKey(parts[indexLine + 2]))
+            {
+                MAS = addressingModeMap["AX"];
+                RS = registerMap[parts[indexLine + 2]];
+            }
+            else
+            {
+                MAS = addressingModeMap["AM"];
+                RS = Int32.Parse(parts[indexLine + 1]);
+            }
+        }
+
+        return (MAS, RS);
+    }
+
+    static (int MAD, int RD) GetMADandRD(string[] parts, int indexLine)
+    {
+        int MAD;
+        int RD;
+        //MAD & RD
+        if (registerMap.ContainsKey(parts[indexLine + 1]))
+        {
+            MAD = addressingModeMap["AD"];
+            RD = registerMap[parts[indexLine + 1]];
+        }
+        else
+        {
+            parts = parts.Concat(parts[indexLine + 1].Split(new char[] { '(', ')' }, StringSplitOptions.RemoveEmptyEntries)).ToArray();
+
+            var tempList = parts.ToList();
+            tempList.RemoveAt(indexLine + 1);
+            parts = tempList.ToArray();
+            if (tempList.Count > 3 + indexLine)
+                indexLine++;
+
+            if (registerMap.ContainsKey(parts[indexLine + 1]))
+            {
+                MAD = addressingModeMap["AI"];
+                RD = registerMap[parts[indexLine + 1]];
+            }
+            else
+            {
+                parts[indexLine + 2] = parts[indexLine + 2].Trim(new char[] { '(', ')' });
+
+                MAD = addressingModeMap["AX"];
+                RD = registerMap[parts[indexLine + 2]];
+            }
+        }
+        return (MAD, RD);
+    }
+
+    static void Eticheta()
+    {
+
     }
 
     static void PrintMemoryContents()
