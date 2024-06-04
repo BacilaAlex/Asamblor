@@ -1,0 +1,3 @@
+-Eticheta sa fie dupa intructiunea apelata
+
+-Numarul sa fie in fata Registrului (AX)

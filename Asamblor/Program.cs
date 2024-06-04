@@ -1,12 +1,9 @@
-﻿using System.IO;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-
-class Assembler
+﻿class Assembler
 {
-    static byte PC;
-    static byte[] mem = new byte[65536];
+    static int PC = 0;
+    static readonly byte[] mem = new byte[65536];
 
-    static Dictionary<string, int> instructionMap = new Dictionary<string, int>
+    static readonly Dictionary<string, int> instructionMap = new Dictionary<string, int>
     {
         //b1
         {"MOV", Convert.ToInt32("0000", 2)},
@@ -63,8 +60,7 @@ class Assembler
         {"PUSH FLAG", Convert.ToInt32("1110000000010001", 2)},
         {"POP FLAG", Convert.ToInt32("1110000000010010", 2)}
     };
-
-    static Dictionary<string, byte[]> instructionMap2 = new Dictionary<string, byte[]>
+    static readonly Dictionary<string, byte[]> instructionByteMap = new Dictionary<string, byte[]>
     {
         //b1
         {"MOV", GetBytes("0000")},
@@ -128,8 +124,7 @@ class Assembler
         number <<= counrrSHL;
         return BitConverter.GetBytes(number).Take(2).ToArray();
     }
-
-    static Dictionary<string, int> registerMap = new Dictionary<string, int>
+    static readonly Dictionary<string, int> registerMap = new Dictionary<string, int>
     {
         {"R0", Convert.ToInt32("0000", 2)},
         {"R1", Convert.ToInt32("0001", 2)},
@@ -148,14 +143,14 @@ class Assembler
         {"R14", Convert.ToInt32("1110", 2)},
         {"R15", Convert.ToInt32("1111", 2)}
     };
-
-    static Dictionary<string, int> addressingModeMap = new Dictionary<string, int>
+    static readonly Dictionary<string, int> addressingModeMap = new Dictionary<string, int>
     {
         {"AM", Convert.ToInt32("00", 2)},
         {"AD", Convert.ToInt32("01", 2)},
         {"AI", Convert.ToInt32("10", 2)},
         {"AX", Convert.ToInt32("11", 2)}
     };
+    static readonly Dictionary<string, int> addressingET = [];
 
     static void Main(string[] args)
     {
@@ -172,12 +167,16 @@ class Assembler
             using (StreamReader sr = new StreamReader(filePath))
             {
                 string line;
-                int memIndex = 0;
                 while ((line = sr.ReadLine()) != null)
                 {
-                    int instructionValue = ParseInstruction(line);
-                    mem[memIndex++] = (byte)(instructionValue >> 8);
-                    mem[memIndex++] = (byte)(instructionValue & 0xFF);
+                    var instructionBytes = ParseInstruction(line);
+                    if (instructionBytes != null)
+                    {
+                        foreach (var bytePart in instructionBytes)
+                        {
+                            mem[PC++] = bytePart;
+                        }
+                    }
                 }
             }
 
@@ -190,36 +189,37 @@ class Assembler
         }
     }
 
-    static int ParseInstruction(string line)
-    {
-        int IR = -1, MAS, RS, MAD, RD, OFFSET = -1;
 
+
+    static List<byte>? ParseInstruction(string line)
+    {
+        int IR = -1, MAS = -1, RS, MAD = -1, RD, OFFSET = -1;
         int indexLine = 0;
+        var addMem = new List<byte>();
 
         // Remove comments and trim the line
-        line = line.Split('#')[0].Trim();
+        line = line.Split(['#', ';'])[0].Trim();
 
         if (string.IsNullOrEmpty(line))
         {
-            throw new ArgumentNullException();
+            return null;
         }
 
         string[] parts = line.Split(new[] { ' ', ',', ':', ';', '.' }, StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).ToArray();
-        string instruction = parts[indexLine];
 
-
-        if (instructionMap.ContainsKey(instruction))
+        if (instructionMap.ContainsKey(parts[0]))
         {
-            IR = instructionMap[instruction];
+            IR = instructionMap[parts[0]];
         }
         else
         {
-            Eticheta();
+            PopulateDictionaryET(parts[0]);
             indexLine++;
         }
 
+        var instruction = parts[indexLine];
 
-        var byteInstruction = instructionMap2[instruction];
+        var byteInstruction = instructionByteMap[instruction];
 
         var lastBite = byteInstruction[^1] & 0x80;
         var lastThreeBites = byteInstruction[^1] & 0xE0;
@@ -239,6 +239,32 @@ class Assembler
             IR += MAD;
             IR <<= 4;
             IR += RD;
+
+
+            addMem.AddRange(BitConverter.GetBytes(IR).Take(2).ToList());
+
+            //byte array
+            if (MAS.Equals(3))
+            {
+                var partInstruction = parts[indexLine + 1];
+                int.TryParse(partInstruction[..partInstruction.IndexOf('(')], out int number);
+                var byteArray = BitConverter.GetBytes(number).Take(2).ToList();
+                addMem.AddRange(byteArray);
+            }
+            else if (MAS.Equals(0))
+            {
+                var partInstruction = parts[indexLine + 1];
+                int.TryParse(partInstruction, out int number);
+                var byteArray = BitConverter.GetBytes(number).Take(2).ToList();
+                addMem.AddRange(byteArray);
+            }
+            if (MAD.Equals(3))
+            {
+                var partInstruction = parts[indexLine];
+                int.TryParse(partInstruction[..partInstruction.IndexOf('(')], out int number);
+                var byteArray = BitConverter.GetBytes(number).Take(2).ToList();
+                addMem.AddRange(byteArray);
+            }
         }
         else
         {
@@ -246,25 +272,70 @@ class Assembler
             {
                 case 0x80:
                     //b2
-                    (MAD, RD) = GetMADandRD(parts, indexLine);
-                    IR <<= 2;
-                    IR += MAD;
-                    IR <<= 4;
-                    IR += RD;
+                    var lastPart = parts[parts.Length - 1];
+                    if (!char.IsDigit(lastPart[lastPart.Length - 1]) && !lastPart[lastPart.Length - 1].Equals(')'))
+                    {
+                        addMem.AddRange(BitConverter.GetBytes(IR).Take(2).ToList());
+
+                        var adr = CalculateTheOffset(PC, parts[indexLine + 1]);
+
+                        var byteArray = BitConverter.GetBytes(adr).Take(2).ToList();
+                        addMem.AddRange(byteArray);
+                    }
+                    else
+                    {
+                        (MAD, RD) = GetMADandRD(parts, indexLine);
+                        IR <<= 2;
+                        IR += MAD;
+                        IR <<= 4;
+                        IR += RD;
+
+                        addMem.AddRange(BitConverter.GetBytes(IR).Take(2).ToList());
+
+                        if (MAD.Equals(3))
+                        {
+                            var partInstruction = parts[indexLine + 1];
+                            int.TryParse(partInstruction[..partInstruction.IndexOf('(')], out int number);
+                            var byteArray = BitConverter.GetBytes(number).Take(2).ToList();
+                            addMem.AddRange(byteArray);
+                        }
+                    }
+
                     break;
                 case 0xC0:
                     //b3
                     IR <<= 8;
+                    OFFSET = CalculateTheOffset(PC, parts[1]);
                     IR += OFFSET;
+                    addMem.AddRange(BitConverter.GetBytes(IR).Take(2).ToList());
                     break;
                 case 0xE0:
                     //b4
                     IR = IR;
+                    addMem.AddRange(BitConverter.GetBytes(IR).Take(2).ToList());
                     break;
             }
         }
 
-        return IR;
+        return addMem;
+    }
+
+    static void PopulateDictionaryET(string ET)
+    {
+        addressingET.Add(ET, PC);
+    }
+
+    static int CalculateTheOffset(int PC, string adr)
+    {
+        if (addressingET.ContainsKey(adr))
+        {
+            return addressingET[adr] - PC;
+        }
+        else
+        {
+            adr = adr.Substring(0, adr.Length - 1);
+            return Convert.ToInt32(adr, 16);
+        }
     }
 
     static (int MAS, int RS) GetMASandRS(string[] parts, int indexLine)
@@ -332,18 +403,13 @@ class Assembler
             }
             else
             {
-                parts[indexLine + 2] = parts[indexLine + 2].Trim(new char[] { '(', ')' });
+                parts[indexLine + 2] = parts[indexLine + 2].Trim(['(', ')']);
 
                 MAD = addressingModeMap["AX"];
                 RD = registerMap[parts[indexLine + 2]];
             }
         }
         return (MAD, RD);
-    }
-
-    static void Eticheta()
-    {
-
     }
 
     static void PrintMemoryContents()
